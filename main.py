@@ -1,4 +1,10 @@
 import os
+from datetime import datetime
+from database import (
+    create_database,
+    save_question_to_database,
+    get_recent_questions
+)
 from config import (
     MODEL_NAME,
     INPUT_COST_PER_1M_TOKENS,
@@ -25,6 +31,7 @@ def print_welcome_message(text_log_file, json_log_file):
     print("Type 'help' to view available commands.")
     print(f"\nText session log created: {text_log_file}")
     print(f"JSON session log created: {json_log_file}")
+    print("Type 'history' to view recent saved database questions.")
 
 
 def print_help():
@@ -143,13 +150,58 @@ def handle_command(command, session_data):
 
     return False
 
+def print_structured_answer(answer):
+    """
+    Print the structured AI answer in a readable format.
+    """
+    print("\nAI Answer:\n")
 
+    print("Summary:")
+    print(answer.get("summary", "No summary provided."))
+
+    print("\nKey points:")
+    key_points = answer.get("key_points", [])
+
+    if key_points:
+        for point in key_points:
+            print(f"- {point}")
+    else:
+        print("- No key points provided.")
+
+    print("\nSimple explanation:")
+    print(answer.get("simple_explanation", "No simple explanation provided."))
+
+    print("\nPractical example:")
+    print(answer.get("practical_example", "No practical example provided."))
+    
+def print_database_history(limit=5):
+    """
+    Print the most recent saved questions from the database.
+    """
+    recent_questions = get_recent_questions(limit)
+
+    if not recent_questions:
+        print("\nNo database history found yet.")
+        return
+
+    print(f"\nRecent database history: Last {len(recent_questions)} question(s)")
+
+    for row in recent_questions:
+        question_id, question, total_tokens, estimated_cost_usd, created_at = row
+
+        print(f"\n{question_id}. {question}")
+        print(f"   Tokens: {total_tokens}")
+        print(f"   Cost: ${estimated_cost_usd}")
+        print(f"   Date: {created_at}")
+        
+        
 def main():
     """
     Main program flow.
     """
     try:
         client = load_client()
+        create_database()
         text_log_file, json_log_file, session_data = create_session_log_files()
         question_count = 0
 
@@ -164,7 +216,12 @@ def main():
                 print(f"JSON session saved to: {json_log_file}")
                 print_session_summary(session_data)
                 break
-
+            if user_input.lower() == "history":
+                print_database_history()
+                continue
+            if user_input.lower() == "summary":
+                print_session_summary(session_data)
+                continue
             if not user_input:
                 print("Please enter a question or command.")
                 continue
@@ -178,8 +235,9 @@ def main():
 
             answer, usage = get_ai_answer(client, user_input)
             estimated_cost = calculate_estimated_cost(usage)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            print("\nAI Answer:\n")
+            print_structured_answer(answer)
             print(answer)
 
             save_question_to_text_log(
@@ -200,8 +258,16 @@ def main():
                 usage,
                 estimated_cost
             )
+            save_question_to_database(
+                user_input,
+                answer,
+                MODEL_NAME,
+                usage,
+                estimated_cost,
+                timestamp
+            )
 
-            print(f"\nQuestion {question_count} saved to text and JSON logs.")
+            print(f"\nQuestion {question_count} saved to text log, JSON log, and database.")
             print(f"Tokens used: {usage['total_tokens']}")
             print(f"Estimated cost: ${estimated_cost['total_cost_usd']}")
 

@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from openai import OpenAI
 import os
+import json
 
 from config import MODEL_NAME, SYSTEM_PROMPT
 
@@ -20,14 +21,14 @@ def load_client():
 
 def get_ai_answer(client, question):
     """
-    Send the user's question to the AI model and return the answer plus token usage.
+    Send the user's question to the AI model and return a structured answer plus token usage.
     """
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=[
             {
-    "role": "system",
-    "content": SYSTEM_PROMPT,
+                "role": "system",
+                "content": SYSTEM_PROMPT,
             },
             {
                 "role": "user",
@@ -36,7 +37,17 @@ def get_ai_answer(client, question):
         ],
     )
 
-    answer = response.choices[0].message.content
+    raw_answer = response.choices[0].message.content
+
+    try:
+        structured_answer = json.loads(raw_answer)
+    except json.JSONDecodeError:
+        structured_answer = {
+            "summary": "The model returned an answer, but it was not valid JSON.",
+            "key_points": [],
+            "simple_explanation": raw_answer,
+            "practical_example": "No structured practical example was provided."
+        }
 
     usage = {
         "prompt_tokens": response.usage.prompt_tokens,
@@ -44,4 +55,4 @@ def get_ai_answer(client, question):
         "total_tokens": response.usage.total_tokens
     }
 
-    return answer, usage
+    return structured_answer, usage
